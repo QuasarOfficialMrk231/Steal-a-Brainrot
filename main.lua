@@ -1,260 +1,163 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TeleportService = game:GetService("TeleportService")
-local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
--- UI
+-- Variables
+local savedPoint = nil
+local flyEnabled = false
+local teleportLoopEnabled = false
+local wallRemoved = false
+local noPlayerColl = false
+
+-- GUI Setup
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Size = UDim2.new(0, 240, 0, 320)
+MainFrame.Position = UDim2.new(0, 100, 0, 100)
+MainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+MainFrame.Active = true
+MainFrame.Draggable = true
 
--- Основная панель
-local Frame = Instance.new("Frame", ScreenGui)
-Frame.Size = UDim2.new(0, 180, 0, 140)
-Frame.Position = UDim2.new(0, 50, 0, 50)
-Frame.BackgroundColor3 = Color3.fromRGB(10, 30, 30)
-Frame.BorderSizePixel = 0
-Frame.Active = true
-Frame.Draggable = false -- Будем делать вручную для совместимости с тач
+local btnToggleGUI = Instance.new("TextButton", ScreenGui)
+btnToggleGUI.Size = UDim2.new(0, 40, 0, 40)
+btnToggleGUI.Position = UDim2.new(0, 0, 0, 100)
+btnToggleGUI.Text = "+"
+btnToggleGUI.BackgroundColor3 = Color3.fromRGB(0, 170, 170)
+btnToggleGUI.TextColor3 = Color3.new(1,1,1)
+btnToggleGUI.Font = Enum.Font.SourceSansBold
+btnToggleGUI.TextSize = 24
+btnToggleGUI.Active = true
+btnToggleGUI.Draggable = true
 
--- Функция для драг&дроп (поддержка ПК и телефона)
-local function makeDraggable(guiObject)
-    local dragging, dragInput, dragStart, startPos
-
-    local function update(input)
-        local delta = input.Position - dragStart
-        guiObject.Position = UDim2.new(
-            startPos.X.Scale,
-            startPos.X.Offset + delta.X,
-            startPos.Y.Scale,
-            startPos.Y.Offset + delta.Y
-        )
-    end
-
-    guiObject.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or
-           input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = guiObject.Position
-
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
-        end
-    end)
-
-    guiObject.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or
-           input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            update(input)
-        end
-    end)
-end
-
-makeDraggable(Frame)
-
--- Кнопка "+" для скрытия/показа панели
-local toggleUI = Instance.new("TextButton", ScreenGui)
-toggleUI.Size = UDim2.new(0, 30, 0, 30)
-toggleUI.Position = UDim2.new(0, 10, 0, 10)
-toggleUI.BackgroundColor3 = Color3.fromRGB(0, 170, 170)
-toggleUI.TextColor3 = Color3.new(1, 1, 1)
-toggleUI.Font = Enum.Font.SourceSansBold
-toggleUI.TextSize = 24
-toggleUI.Text = "+"
-
-makeDraggable(toggleUI)
-
-local uiVisible = true
-toggleUI.MouseButton1Click:Connect(function()
-    uiVisible = not uiVisible
-    Frame.Visible = uiVisible
+btnToggleGUI.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
 end)
 
--- Координаты в правом верхнем углу
-local CoordLabel = Instance.new("TextLabel", ScreenGui)
-CoordLabel.Size = UDim2.new(0, 160, 0, 20)
-CoordLabel.Position = UDim2.new(1, -170, 0, 10)
-CoordLabel.BackgroundTransparency = 1
-CoordLabel.TextColor3 = Color3.fromRGB(0, 255, 255)
-CoordLabel.Font = Enum.Font.SourceSans
-CoordLabel.TextSize = 14
-CoordLabel.TextXAlignment = Enum.TextXAlignment.Right
-CoordLabel.TextYAlignment = Enum.TextYAlignment.Top
+MainFrame.Visible = false
 
--- Переменные
-local FlyActive = false
-local NoPlayerColl = false
-local WallRemoved = false
-local TeleportLoop = false
-local TeleportInterval = 0.25
-local FlyBaseY = -6.9
-local FlyHeight = 44
-local lastFlyTeleport = 0
-
-local character = nil
-local rootPart = nil
-
-local function updateCharacter()
-    character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-    rootPart = character:WaitForChild("HumanoidRootPart")
-end
-updateCharacter()
-LocalPlayer.CharacterAdded:Connect(updateCharacter)
-
--- Переподключение
-local function RejoinServer()
-    TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
-end
-
--- Полет с касанием пола
-local function FlyToBase(dt)
-    if not FlyActive or not rootPart then return end
-
-    local pos = rootPart.Position
-    -- Движемся к базе по XZ (0,0)
-    local horizDist = Vector3.new(pos.X, 0, pos.Z).Magnitude
-    local dir = Vector3.new(-pos.X, 0, -pos.Z).Unit
-
-    if horizDist > 1 then
-        rootPart.Velocity = Vector3.new(dir.X * 80, rootPart.Velocity.Y, dir.Z * 80)
-    else
-        rootPart.Velocity = Vector3.new(0, rootPart.Velocity.Y, 0)
-    end
-
-    local timeNow = tick()
-    if timeNow - lastFlyTeleport > 0.8 then
-        if pos.Y <= FlyBaseY + 0.2 then
-            rootPart.CFrame = rootPart.CFrame + Vector3.new(0, FlyHeight, 0)
-            lastFlyTeleport = timeNow
-        end
-    end
-end
-
-RunService.Heartbeat:Connect(FlyToBase)
-
--- Телепорт к базе каждые 0.25 секунды
-local TeleportConnection = nil
-local function StartTeleportLoop()
-    if TeleportConnection then return end
-    TeleportConnection = RunService.Heartbeat:Connect(function()
-        if TeleportLoop and rootPart then
-            rootPart.CFrame = CFrame.new(0, FlyBaseY, 0)
-        end
-    end)
-end
-
-local function StopTeleportLoop()
-    if TeleportConnection then
-        TeleportConnection:Disconnect()
-        TeleportConnection = nil
-    end
-end
-
--- noplayercoll (снимает коллизию с персонажа)
-local function ToggleNoPlayerColl()
-    NoPlayerColl = not NoPlayerColl
-    if character then
-        for _, part in pairs(character:GetChildren()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = not NoPlayerColl
-            end
-        end
-    end
-end
-
--- Удалить стены (Y>1 или имя содержит "wall")
-local originalWallProperties = {}
-
-local function ToggleRemoveWalls()
-    WallRemoved = not WallRemoved
-    for _, obj in pairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") then
-            local yPos = obj.Position.Y
-            local nameLower = obj.Name:lower()
-            if (yPos > 1 or string.find(nameLower, "wall")) then
-                if WallRemoved then
-                    if not originalWallProperties[obj] then
-                        originalWallProperties[obj] = {
-                            Transparency = obj.Transparency,
-                            CanCollide = obj.CanCollide
-                        }
-                    end
-                    obj.Transparency = 0.7
-                    obj.CanCollide = false
-                else
-                    if originalWallProperties[obj] then
-                        obj.Transparency = originalWallProperties[obj].Transparency
-                        obj.CanCollide = originalWallProperties[obj].CanCollide
-                        originalWallProperties[obj] = nil
-                    end
-                end
-            end
-        end
-    end
-end
-
--- Обновление координат
-RunService.RenderStepped:Connect(function()
-    if rootPart then
-        local pos = rootPart.Position
-        CoordLabel.Text = string.format("X=%.2f  Y=%.2f  Z=%.2f", pos.X, pos.Y, pos.Z)
-    end
-end)
-
--- Кнопки (компактные, высота 25)
-local function createButton(text, posY, callback)
-    local btn = Instance.new("TextButton", Frame)
-    btn.Size = UDim2.new(1, -20, 0, 25)
+-- Function to create small buttons
+local function createButton(name, posY, callback)
+    local btn = Instance.new("TextButton", MainFrame)
+    btn.Size = UDim2.new(0, 220, 0, 25)
     btn.Position = UDim2.new(0, 10, 0, posY)
-    btn.BackgroundColor3 = Color3.fromRGB(0, 170, 170)
+    btn.Text = name
+    btn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
     btn.TextColor3 = Color3.new(1,1,1)
     btn.Font = Enum.Font.SourceSansBold
-    btn.TextSize = 16
-    btn.Text = text
-    btn.AutoButtonColor = true
+    btn.TextSize = 12
     btn.MouseButton1Click:Connect(callback)
-    return btn
 end
 
-local btnFly = createButton("Полет к базе", 10, function()
-    FlyActive = not FlyActive
-    if FlyActive then
-        print("Полет включен")
-    else
-        print("Полет выключен")
+-- Coordinates Display
+local coordLabel = Instance.new("TextLabel", ScreenGui)
+coordLabel.Size = UDim2.new(0, 300, 0, 20)
+coordLabel.Position = UDim2.new(1, -310, 0, 10)
+coordLabel.Text = "X=0 Y=0 Z=0"
+coordLabel.BackgroundTransparency = 1
+coordLabel.TextColor3 = Color3.new(1,1,1)
+coordLabel.Font = Enum.Font.SourceSans
+coordLabel.TextSize = 14
+
+RunService.RenderStepped:Connect(function()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local pos = LocalPlayer.Character.HumanoidRootPart.Position
+        coordLabel.Text = string.format("X=%.1f Y=%.1f Z=%.1f", pos.X, pos.Y, pos.Z)
     end
 end)
 
-local btnNoPlayerColl = createButton("NoPlayerColl", 45, function()
-    ToggleNoPlayerColl()
-    print("NoPlayerColl: "..tostring(NoPlayerColl))
-end)
-
-local btnRemoveWalls = createButton("Удалить стены", 80, function()
-    ToggleRemoveWalls()
-    print("Удалить стены: "..tostring(WallRemoved))
-end)
-
-local btnTeleportLoop = createButton("Телепорт к базе", 115, function()
-    TeleportLoop = not TeleportLoop
-    if TeleportLoop then
-        StartTeleportLoop()
-        print("Телепорт к базе включен")
-    else
-        StopTeleportLoop()
-        print("Телепорт к базе выключен")
+-- Save Point Button
+createButton("Поставить Точку", 10, function()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        savedPoint = LocalPlayer.Character.HumanoidRootPart.Position
     end
 end)
 
-local btnRejoin = createButton("Переподключиться", 150, function()
-    RejoinServer()
-end) 
+-- Teleport to Point Loop
+createButton("Телепорт К Точке", 40, function()
+    teleportLoopEnabled = not teleportLoopEnabled
+    while teleportLoopEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") do
+        LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(savedPoint.X, savedPoint.Y, savedPoint.Z)
+        task.wait(0.25)
+    end
+end)
+
+-- Reconnect to Current Server
+createButton("Переподключиться", 70, function()
+    TeleportService:Teleport(game.PlaceId)
+end)
+
+-- Fly with Ground Touch Every 0.2 sec
+createButton("Включить Полет", 100, function()
+    flyEnabled = not flyEnabled
+    while flyEnabled do
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = LocalPlayer.Character.HumanoidRootPart
+            hrp.Velocity = Vector3.new(0, 0, 0)
+            hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(savedPoint.X, hrp.Position.Y, savedPoint.Z), 0.1)
+            if hrp.Position.Y <= -6.8 then
+                task.wait(0.2)
+                hrp.CFrame = CFrame.new(hrp.Position.X, 44, hrp.Position.Z)
+            end
+        end
+        task.wait(0.1)
+    end
+end)
+-- NoPlayerColl Toggle
+createButton("NoPlayerColl", 130, function()
+    noPlayerColl = not noPlayerColl
+    if LocalPlayer.Character then
+        for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = not noPlayerColl
+            end
+        end
+    end
+end)
+
+-- Remove/Restore Walls Above -5.1
+createButton("Удалить Стены", 160, function()
+    wallRemoved = not wallRemoved
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and (obj.Position.Y > -5.1 or string.find(obj.Name, "wall")) then
+            if wallRemoved then
+                obj.Transparency = 0.8
+                obj.CanCollide = false
+            else
+                obj.Transparency = 0
+                obj.CanCollide = true
+            end
+        end
+    end
+end)
+
+-- AutoAim Functionality
+RunService.RenderStepped:Connect(function()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool") then
+        local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
+        local closestTarget = nil
+        local closestDist = math.huge
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local dist = (LocalPlayer.Character.HumanoidRootPart.Position - player.Character.HumanoidRootPart.Position).Magnitude
+                if dist < closestDist then
+                    closestDist = dist
+                    closestTarget = player
+                end
+            end
+        end
+        if closestTarget and tool:FindFirstChild("Handle") then
+            tool.Handle.CFrame = CFrame.lookAt(tool.Handle.Position, closestTarget.Character.HumanoidRootPart.Position)
+        end
+    end
+end)
+
+-- About Author Label
+local aboutLabel = Instance.new("TextLabel", ScreenGui)
+aboutLabel.Size = UDim2.new(0, 220, 0, 20)
+aboutLabel.Position = UDim2.new(0, 100, 0, 80)
+aboutLabel.Text = "Автор: @Ew3qs | https://www.donationalerts.com/r/ew3qs"
+aboutLabel.BackgroundTransparency = 1
+aboutLabel.TextColor3 = Color3.new(1,1,1)
+aboutLabel.Font = Enum.Font.SourceSans
+aboutLabel.TextSize = 12
