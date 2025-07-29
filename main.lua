@@ -4,9 +4,9 @@ local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Camera = workspace.CurrentCamera
 
-local savedPosition = nil -- сохранённая точка
+local savedPosition = nil
 
--- ===== Функции Телепорта =====
+-- Телепорты
 local function TeleportToRoof()
     local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
     local rootPart = character:FindFirstChild("HumanoidRootPart")
@@ -36,8 +36,6 @@ local function TeleportToSpawnLower()
             local newPosition = Vector3.new(spawnPos.X, spawnPos.Y - 3, spawnPos.Z)
             rootPart.CFrame = CFrame.new(newPosition)
         end
-    else
-        warn("SpawnLocation не найден!")
     end
 end
 
@@ -46,7 +44,6 @@ local function SaveCurrentPosition()
     local rootPart = character:FindFirstChild("HumanoidRootPart")
     if rootPart then
         savedPosition = rootPart.Position
-        print("Позиция сохранена:", savedPosition)
     end
 end
 
@@ -57,8 +54,6 @@ local function TeleportToSavedPosition()
         if rootPart then
             rootPart.CFrame = CFrame.new(savedPosition)
         end
-    else
-        warn("Позиция не сохранена!")
     end
 end
 
@@ -67,10 +62,37 @@ local function Reconnect()
     TeleportService:Teleport(game.PlaceId, LocalPlayer)
 end
 
--- ====== Перетаскивание GUI ======
+-- ===== GUI =====
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "TeleportGui"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = game:GetService("CoreGui")
+
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Size = UDim2.new(0, 30, 0, 30)
+ToggleButton.Position = UDim2.new(0, 10, 0, 36) -- Под кнопкой Roblox меню
+ToggleButton.Text = "+"
+ToggleButton.BackgroundColor3 = Color3.fromRGB(0, 255, 255)
+ToggleButton.TextColor3 = Color3.new(1,1,1)
+ToggleButton.Font = Enum.Font.SourceSansBold
+ToggleButton.TextSize = 20
+ToggleButton.BorderSizePixel = 0
+ToggleButton.AutoButtonColor = false
+ToggleButton.Parent = ScreenGui
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 160, 0, 270)
+MainFrame.Position = UDim2.new(0, 50, 0, 180)
+MainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+MainFrame.BorderSizePixel = 0
+MainFrame.Visible = false
+MainFrame.Parent = ScreenGui
+
+-- Перетаскивание Touch/Mouse
 local function MakeDraggable(guiObject)
     local dragging = false
-    local dragInput, dragStart, startPos
+    local dragStart = Vector3.new()
+    local startPos = UDim2.new()
 
     local function update(input)
         local delta = input.Position - dragStart
@@ -83,10 +105,11 @@ local function MakeDraggable(guiObject)
     end
 
     guiObject.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
             dragStart = input.Position
             startPos = guiObject.Position
+
             input.Changed:Connect(function()
                 if input.UserInputState == Enum.UserInputState.End then
                     dragging = false
@@ -96,48 +119,18 @@ local function MakeDraggable(guiObject)
     end)
 
     guiObject.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement then
-            dragInput = input
-        end
-    end)
-
-    RunService.RenderStepped:Connect(function()
-        if dragging then
-            update(UserInputService:GetMouseLocation())
+        if (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+            if dragging then
+                update(input)
+            end
         end
     end)
 end
 
--- ===== GUI Elements =====
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "TeleportGui"
-ScreenGui.ResetOnSpawn = false
-ScreenGui.Parent = game:GetService("CoreGui")
-
-local ToggleButton = Instance.new("TextButton")
-ToggleButton.Size = UDim2.new(0, 30, 0, 30)
-ToggleButton.Position = UDim2.new(0, 10, 0, 200)
-ToggleButton.Text = "+"
-ToggleButton.BackgroundColor3 = Color3.fromRGB(0, 255, 255)
-ToggleButton.TextColor3 = Color3.new(1,1,1)
-ToggleButton.Font = Enum.Font.SourceSansBold
-ToggleButton.TextSize = 20
-ToggleButton.BorderSizePixel = 0
-ToggleButton.AutoButtonColor = false
-ToggleButton.Parent = ScreenGui
-
 MakeDraggable(ToggleButton)
-
-local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 160, 0, 270)
-MainFrame.Position = UDim2.new(0, 50, 0, 180)
-MainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
-MainFrame.BorderSizePixel = 0
-MainFrame.Visible = false
-MainFrame.Parent = ScreenGui
-
 MakeDraggable(MainFrame)
 
+-- Создание кнопок
 local function CreateButton(text, posY)
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(0, 140, 0, 30)
