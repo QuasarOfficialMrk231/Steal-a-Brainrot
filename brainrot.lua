@@ -1,18 +1,28 @@
---// Services
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
-local HttpService = game:GetService("HttpService")
 
---// Constants
-local GameID = 15975200710 -- Steal a Brainrot Game ID
-local UserToTrack = ""
+local function HTTPRequest(options)
+    if http_request then
+        return http_request(options)
+    elseif request then
+        return request(options)
+    elseif syn and syn.request then
+        return syn.request(options)
+    else
+        error("Executor не поддерживает HTTP-запросы!")
+    end
+end
 
---// GUI Creation
+local GameID = 15975200710
+
+-- Главное окно (скрыто при запуске)
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
 ScreenGui.Name = "BrainrotTrackerGUI"
+ScreenGui.Enabled = false
 
 local Frame = Instance.new("Frame", ScreenGui)
-Frame.Size = UDim2.new(0, 300, 0, 220)
+Frame.Size = UDim2.new(0, 300, 0, 260)
 Frame.Position = UDim2.new(0, 50, 0, 50)
 Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 Frame.BorderSizePixel = 0
@@ -44,10 +54,37 @@ TrackButton.Size = UDim2.new(1, -20, 0, 30)
 TrackButton.Position = UDim2.new(0, 10, 0, 120)
 TrackButton.Text = "Отслеживать вход"
 
---// API Functions
-function GetUserIdFromUsername(username)
+local CloseButton = Instance.new("TextButton", Frame)
+CloseButton.Size = UDim2.new(1, -20, 0, 30)
+CloseButton.Position = UDim2.new(0, 10, 0, 160)
+CloseButton.Text = "Закрыть скрипт"
+CloseButton.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+CloseButton.TextColor3 = Color3.new(1,1,1)
+
+-- Плавающая кнопка — маленький крестик (30x30)
+local ToggleGui = Instance.new("ScreenGui", game.CoreGui)
+ToggleGui.Name = "BrainrotToggleGui"
+
+local ToggleButton = Instance.new("TextButton", ToggleGui)
+ToggleButton.Size = UDim2.new(0, 30, 0, 30)
+ToggleButton.Position = UDim2.new(0, 10, 0, 10)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(100, 0, 0)
+ToggleButton.TextColor3 = Color3.new(1,1,1)
+ToggleButton.Text = "✕"
+ToggleButton.Font = Enum.Font.SourceSansBold
+ToggleButton.TextSize = 24
+ToggleButton.AutoButtonColor = false
+ToggleButton.Active = true
+ToggleButton.Draggable = true
+
+ToggleButton.MouseButton1Click:Connect(function()
+    ScreenGui.Enabled = not ScreenGui.Enabled
+end)
+
+-- API функции
+local function GetUserIdFromUsername(username)
     local url = "https://api.roblox.com/users/get-by-username?username="..username
-    local response = syn.request({Url = url, Method = "GET"})
+    local response = HTTPRequest({Url = url, Method = "GET"})
     local data = HttpService:JSONDecode(response.Body)
     if data and data.Id then
         return data.Id
@@ -57,10 +94,10 @@ function GetUserIdFromUsername(username)
     end
 end
 
-function GetPresence(userId)
+local function GetPresence(userId)
     local url = "https://presence.roblox.com/v1/presence/users"
     local body = HttpService:JSONEncode({userIds = {userId}})
-    local response = syn.request({
+    local response = HTTPRequest({
         Url = url,
         Method = "POST",
         Headers = {["Content-Type"] = "application/json"},
@@ -69,27 +106,31 @@ function GetPresence(userId)
     local data = HttpService:JSONDecode(response.Body)
     if data and data.userPresences then
         return data.userPresences[1]
+    else
+        return nil
     end
 end
 
-function JoinToPlayerServer(username)
+local function JoinToPlayerServer(username)
     local userId = GetUserIdFromUsername(username)
-    if userId then
-        local presence = GetPresence(userId)
-        if presence.placeId ~= 0 and presence.rootPlaceId == GameID then
-            TeleportService:TeleportToPlaceInstance(presence.placeId, presence.gameId, Players.LocalPlayer)
-        else
-            warn("Игрок в другой игре или оффлайн.")
-        end
+    if not userId then
+        warn("Пользователь не найден!")
+        return
+    end
+    local presence = GetPresence(userId)
+    if presence and presence.placeId ~= 0 and presence.rootPlaceId == GameID then
+        TeleportService:TeleportToPlaceInstance(presence.placeId, presence.gameId, Players.LocalPlayer)
+    else
+        warn("Игрок в другой игре или оффлайн.")
     end
 end
 
-function TrackPlayerJoin(username)
+local function TrackPlayerJoin(username)
     local userId = GetUserIdFromUsername(username)
     if not userId then return end
     while true do
         local presence = GetPresence(userId)
-        if presence.placeId ~= 0 and presence.rootPlaceId == GameID then
+        if presence and presence.placeId ~= 0 and presence.rootPlaceId == GameID then
             game.StarterGui:SetCore("SendNotification", {
                 Title = username.." зашел в Steal a Brainrot!",
                 Text = "Нажми, чтобы присоединиться.",
@@ -101,13 +142,17 @@ function TrackPlayerJoin(username)
     end
 end
 
---// Button Events
 JoinButton.MouseButton1Click:Connect(function()
-    UserToTrack = TextBox.Text
-    JoinToPlayerServer(UserToTrack)
+    JoinToPlayerServer(TextBox.Text)
 end)
 
 TrackButton.MouseButton1Click:Connect(function()
-    UserToTrack = TextBox.Text
-    spawn(function() TrackPlayerJoin(UserToTrack) end)
+    spawn(function()
+        TrackPlayerJoin(TextBox.Text)
+    end)
+end)
+
+CloseButton.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
+    ToggleGui:Destroy()
 end)
