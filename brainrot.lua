@@ -2,6 +2,9 @@ local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 
+local LocalPlayer = Players.LocalPlayer
+local GameID = 15975200710
+
 local function HTTPRequest(options)
     if http_request then
         return http_request(options)
@@ -14,15 +17,13 @@ local function HTTPRequest(options)
     end
 end
 
-local GameID = 15975200710
-
 -- Главное окно (скрыто при запуске)
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
 ScreenGui.Name = "BrainrotTrackerGUI"
 ScreenGui.Enabled = false
 
 local Frame = Instance.new("Frame", ScreenGui)
-Frame.Size = UDim2.new(0, 300, 0, 260)
+Frame.Size = UDim2.new(0, 300, 0, 300)
 Frame.Position = UDim2.new(0, 50, 0, 50)
 Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 Frame.BorderSizePixel = 0
@@ -54,9 +55,14 @@ TrackButton.Size = UDim2.new(1, -20, 0, 30)
 TrackButton.Position = UDim2.new(0, 10, 0, 120)
 TrackButton.Text = "Отслеживать вход"
 
+local RejoinButton = Instance.new("TextButton", Frame)
+RejoinButton.Size = UDim2.new(1, -20, 0, 30)
+RejoinButton.Position = UDim2.new(0, 10, 0, 160)
+RejoinButton.Text = "Переподключиться к своему серверу"
+
 local CloseButton = Instance.new("TextButton", Frame)
 CloseButton.Size = UDim2.new(1, -20, 0, 30)
-CloseButton.Position = UDim2.new(0, 10, 0, 160)
+CloseButton.Position = UDim2.new(0, 10, 0, 200)
 CloseButton.Text = "Закрыть скрипт"
 CloseButton.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
 CloseButton.TextColor3 = Color3.new(1,1,1)
@@ -118,8 +124,8 @@ local function JoinToPlayerServer(username)
         return
     end
     local presence = GetPresence(userId)
-    if presence and presence.placeId ~= 0 and presence.rootPlaceId == GameID then
-        TeleportService:TeleportToPlaceInstance(presence.placeId, presence.gameId, Players.LocalPlayer)
+    if presence and presence.placeId ~= 0 and presence.rootPlaceId == GameID and presence.gameId then
+        TeleportService:TeleportToPlaceInstance(presence.placeId, presence.gameId, LocalPlayer)
     else
         warn("Игрок в другой игре или оффлайн.")
     end
@@ -143,13 +149,31 @@ local function TrackPlayerJoin(username)
 end
 
 JoinButton.MouseButton1Click:Connect(function()
-    JoinToPlayerServer(TextBox.Text)
+    if TextBox.Text ~= "" then
+        JoinToPlayerServer(TextBox.Text)
+    else
+        warn("Введите ник игрока!")
+    end
 end)
 
 TrackButton.MouseButton1Click:Connect(function()
-    spawn(function()
-        TrackPlayerJoin(TextBox.Text)
-    end)
+    if TextBox.Text ~= "" then
+        spawn(function()
+            TrackPlayerJoin(TextBox.Text)
+        end)
+    else
+        warn("Введите ник игрока!")
+    end
+end)
+
+RejoinButton.MouseButton1Click:Connect(function()
+    local placeId = game.PlaceId
+    local jobId = game.JobId
+    if placeId and jobId then
+        TeleportService:TeleportToPlaceInstance(placeId, jobId, LocalPlayer)
+    else
+        warn("Не удалось получить текущий сервер.")
+    end
 end)
 
 CloseButton.MouseButton1Click:Connect(function()
