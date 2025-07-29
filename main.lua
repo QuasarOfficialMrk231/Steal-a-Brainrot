@@ -1,4 +1,4 @@
--- Скрипт @Ew3qs с полётом из KaspikScriptsRb и AutoAim из spicy/chilli
+-- Скрипт @Ew3qs
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
