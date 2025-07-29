@@ -1,32 +1,32 @@
--- Delta X Universal Script by @Ew3qs
+-- Full Script for Steal a Brainrot by @Ew3qs
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
 local TeleportService = game:GetService("TeleportService")
+local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
 local savedPoint = nil
 local flying = false
+local autoAimEnabled = false
 local noPlayerCollEnabled = false
 local noWallsEnabled = false
-local autoAimEnabled = false
 local wallsStored = {}
 
 -- GUI Setup
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
 ScreenGui.ResetOnSpawn = false
 
+-- Main Frame
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 220, 0, 270)
+MainFrame.Size = UDim2.new(0, 220, 0, 250)
 MainFrame.Position = UDim2.new(0, 50, 0, 100)
-MainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-MainFrame.BorderColor3 = Color3.fromRGB(0, 255, 255)
+MainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
 MainFrame.Active = true
 MainFrame.Draggable = true
 MainFrame.Visible = false
 
+-- Toggle Button (+)
 local PlusButton = Instance.new("TextButton", ScreenGui)
 PlusButton.Size = UDim2.new(0, 30, 0, 30)
 PlusButton.Position = UDim2.new(0, 10, 0, 10)
@@ -38,12 +38,13 @@ PlusButton.MouseButton1Click:Connect(function()
     MainFrame.Visible = not MainFrame.Visible
 end)
 
+-- Coordinates Display (Top Right Corner)
 local CoordsLabel = Instance.new("TextLabel", ScreenGui)
 CoordsLabel.Size = UDim2.new(0, 200, 0, 15)
 CoordsLabel.Position = UDim2.new(1, -210, 0, 5)
 CoordsLabel.BackgroundTransparency = 1
 CoordsLabel.TextColor3 = Color3.fromRGB(0, 255, 255)
-CoordsLabel.TextSize = 10
+CoordsLabel.TextSize = 12
 CoordsLabel.Text = ""
 
 RunService.RenderStepped:Connect(function()
@@ -53,37 +54,30 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
-local AuthorLabel = Instance.new("TextLabel", MainFrame)
-AuthorLabel.Size = UDim2.new(0, 200, 0, 15)
-AuthorLabel.Position = UDim2.new(0, 10, 0, 5)
-AuthorLabel.BackgroundTransparency = 1
-AuthorLabel.TextColor3 = Color3.fromRGB(0, 255, 255)
-AuthorLabel.TextSize = 10
-AuthorLabel.Text = "@Ew3qs | Поддержать: donationalerts.com/r/Ew3qs"
-
+-- Buttons Function
 local function CreateButton(name, posY, callback)
     local btn = Instance.new("TextButton", MainFrame)
     btn.Size = UDim2.new(0, 200, 0, 25)
     btn.Position = UDim2.new(0, 10, 0, posY)
     btn.Text = name
     btn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-    btn.TextColor3 = Color3.fromHSV(tick() % 5 / 5, 1, 1)
+    btn.TextColor3 = Color3.fromRGB(0, 255, 255)
     btn.MouseButton1Click:Connect(callback)
 end
 
 -- Save Point
-CreateButton("Установить точку", 30, function()
+CreateButton("Установить точку", 10, function()
     if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
         savedPoint = LocalPlayer.Character.HumanoidRootPart.Position
     end
 end)
 
--- Remove Walls
-CreateButton("Удалить стены", 60, function()
+-- Удалить стены
+CreateButton("Удалить стены", 40, function()
     noWallsEnabled = not noWallsEnabled
     if noWallsEnabled then
         for _,v in pairs(Workspace:GetDescendants()) do
-            if v:IsA("BasePart") and v.Position.Y > -5.1 then
+            if v:IsA("BasePart") and v.Position.Y > -5.1 and string.find(v.Name:lower(), "wall") then
                 table.insert(wallsStored, v)
                 v.Transparency = 0.7
                 v.CanCollide = false
@@ -100,78 +94,103 @@ CreateButton("Удалить стены", 60, function()
     end
 end)
 
--- Teleport to Point
-CreateButton("Телепорт к точке", 90, function()
+-- Телепорт к точке
+CreateButton("Телепорт к точке", 70, function()
     if savedPoint and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
         LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(savedPoint)
     end
 end)
 
--- Bounce Fly
-CreateButton("Полет к точке", 120, function()
-    flying = not flying
-    if flying then
-        task.spawn(function()
-            while flying do
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and savedPoint then
-                    local root = LocalPlayer.Character.HumanoidRootPart
-                    local moveDir = Vector3.new(savedPoint.X - root.Position.X, 0, savedPoint.Z - root.Position.Z)
-                    if moveDir.Magnitude > 1 then
-                        local direction = moveDir.Unit * 16 * RunService.RenderStepped:Wait()
-                        root.CFrame = root.CFrame + direction
+-- Полет к точке (пешком)
+CreateButton("Полет к точке", 100, function()
+    if savedPoint and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        flying = not flying
+        local Humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        local RootPart = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        
+        if flying then
+            task.spawn(function()
+                while flying and Humanoid and RootPart do
+                    local direction = (Vector3.new(savedPoint.X, RootPart.Position.Y, savedPoint.Z) - RootPart.Position).Unit
+                    local distance = (Vector3.new(savedPoint.X, RootPart.Position.Y, savedPoint.Z) - RootPart.Position).Magnitude
+                    
+                    Humanoid:Move(Vector3.new(direction.X, 0, direction.Z), false)
+                    
+                    -- Прыжок если на земле
+                    if Humanoid.FloorMaterial ~= Enum.Material.Air then
+                        Humanoid.Jump = true
                     end
-                    if root.Position.Y <= -6.8 then
-                        root.CFrame = root.CFrame + Vector3.new(0, 44, 0)
-                        task.wait(0.4)
+                    
+                    if distance < 3 then
+                        flying = false
+                        Humanoid:Move(Vector3.zero, false)
                     end
+                    
+                    task.wait(0.1)
                 end
-                task.wait(0.01)
-            end
-        end)
-    end
-end)
-
--- Reconnect
-CreateButton("Переподключение", 150, function()
-    TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId)
-end)
-
--- AutoAim Shot
-CreateButton("AutoAim", 180, function()
-    autoAimEnabled = not autoAimEnabled
-end)
-
-RunService.RenderStepped:Connect(function()
-    if autoAimEnabled and LocalPlayer.Character then
-        local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
-        if tool and (tool.Name:lower():find("laser") or tool.Name:lower():find("cape") or tool.Name:lower():find("taser")) then
-            local closestPlayer = nil
-            local shortestDistance = math.huge
-            for _,player in pairs(Players:GetPlayers()) do
-                if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                    local distance = (LocalPlayer.Character.HumanoidRootPart.Position - player.Character.HumanoidRootPart.Position).Magnitude
-                    if distance < shortestDistance then
-                        closestPlayer = player
-                        shortestDistance = distance
-                    end
-                end
-            end
-            if closestPlayer then
-                local root = LocalPlayer.Character.HumanoidRootPart
-                root.CFrame = CFrame.lookAt(root.Position, Vector3.new(closestPlayer.Character.HumanoidRootPart.Position.X, root.Position.Y, closestPlayer.Character.HumanoidRootPart.Position.Z))
-                tool:Activate()
-            end
+            end)
+        else
+            Humanoid:Move(Vector3.zero, false)
         end
     end
 end)
 
+-- Переподключение
+CreateButton("Переподключение", 130, function()
+    TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId)
+end)
+
+-- AutoAim
+CreateButton("AutoAim", 160, function()
+    autoAimEnabled = not autoAimEnabled
+end)
+
 -- NoPlayerColl
-CreateButton("NoPlayerColl", 210, function()
+CreateButton("NoPlayerColl", 190, function()
     noPlayerCollEnabled = not noPlayerCollEnabled
     if LocalPlayer.Character then
         for _,v in pairs(LocalPlayer.Character:GetDescendants()) do
             if v:IsA("BasePart") then
                 v.CanCollide = not noPlayerCollEnabled
+            end
+        end
+    end
+end)
+
+-- Об авторе
+local AboutLabel = Instance.new("TextButton", MainFrame)
+AboutLabel.Size = UDim2.new(0, 200, 0, 25)
+AboutLabel.Position = UDim2.new(0, 10, 0, 220)
+AboutLabel.Text = "@Ew3qs | Поддержать автора"
+AboutLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+AboutLabel.TextColor3 = Color3.fromRGB(0, 255, 255)
+AboutLabel.MouseButton1Click:Connect(function()
+    setclipboard("https://www.donationalerts.com/r/Ew3qs")
+end)
+
+-- AutoAim Execution on Tap/Click
+local UserInputService = game:GetService("UserInputService")
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if autoAimEnabled and input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        local closestPlayer = nil
+        local shortestDistance = math.huge
+        for _,player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local distance = (LocalPlayer.Character.HumanoidRootPart.Position - player.Character.HumanoidRootPart.Position).Magnitude
+                if distance < shortestDistance then
+                    closestPlayer = player
+                    shortestDistance = distance
+                end
+            end
+        end
+        
+        if closestPlayer and LocalPlayer.Character then
+            local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
+            if tool and tool:FindFirstChild("Activate") then
+                Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, closestPlayer.Character.HumanoidRootPart.Position)
+                tool:Activate()
+            elseif tool then
+                tool:Activate()
             end
         end
     end
